@@ -1,0 +1,402 @@
+{
+  "name": "DJEN - Extração Intimações Eduardo Koetz → Supabase",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 6,
+              "triggerAtMinute": 15
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b14c53a0-d82e-43fd-a4ab-c8653d7c3f96",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const hoje = new Date();\nconst d0 = new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()));\nconst d1 = new Date(d0); d1.setUTCDate(d0.getUTCDate() - 30);\nconst ymd = d => d.toISOString().slice(0,10);\n\nreturn [{\n  dataInicio: ymd(d1),  // últimos 30 dias\n  dataFim: ymd(d0),\n  itensPorPagina: 100,\n  pagina: 1,\n  meio: 'D'\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "8d87a796-8a33-4518-b7a6-1a42f1a3460d",
+      "name": "Prep Datas (D-1 a D)"
+    },
+    {
+      "parameters": {
+        "url": "https://comunicaapi.pje.jus.br/api/v1/comunicacao",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "dataDisponibilizacaoInicio",
+              "value": "={{$json.dataInicio}}"
+            },
+            {
+              "name": "dataDisponibilizacaoFim",
+              "value": "={{$json.dataFim}}"
+            },
+            {
+              "name": "itensPorPagina",
+              "value": "={{$json.itensPorPagina}}"
+            },
+            {
+              "name": "pagina",
+              "value": "={{$json.pagina}}"
+            },
+            {
+              "name": "meio",
+              "value": "={{$json.meio}}"
+            },
+            {
+              "name": "ufOab",
+              "value": "RS"
+            },
+            {
+              "name": "numeroOab",
+              "value": "73409"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "1442868c-14dc-4ed4-8c34-ff74b34b79ec",
+      "name": "DJEN – Consulta (página 1)",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Util: HTML -> texto\nfunction htmlToText(html) {\n  if (!html || typeof html !== 'string') return '';\n  html = html.replace(/<\\s*br\\s*\\/?>/gi, '\\n');\n  html = html.replace(/<\\/\\s*p\\s*>/gi, '\\n');\n  html = html.replace(/<[^>]+>/g, '');\n  html = html\n    .replace(/&amp;/g, '&')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#039;|&apos;/g, \"'\");\n  return html\n    .split('\\n').map(l => l.trimEnd()).join('\\n')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\n// Util: \"26/09/2025\" -> \"2025-09-26T00:00:00Z\"\nfunction parseBRDate(d) {\n  if (!d || typeof d !== 'string') return null;\n  const m = d.match(/^(\\d{2})\\/(\\d{2})\\/(\\d{4})$/);\n  if (!m) return null;\n  const [, dd, mm, yyyy] = m;\n  return `${yyyy}-${mm}-${dd}T00:00:00Z`;\n}\n\n\nconst payload = items[0].json;\nlet rows = [];\nif (Array.isArray(payload)) rows = payload;\nelse if (Array.isArray(payload?.items)) rows = payload.items;\nelse if (Array.isArray(payload?.dados)) rows = payload.dados;\n\n// Mapeamento\nconst out = [];\nfor (const r of rows) {\n  const id = String(\n    r.hash ??\n    r.id ??\n    r.numeroComunicacao ??\n    r.comunicacao_id ??\n    r.numero ??\n    ''\n  );\n  if (!id) continue;\n\n  const textoFonte =\n    r.conteudo ??\n    r.conteudo_html ??\n    r.teor ??\n    r.texto ??\n    r.descricao ??\n    '';\n\n  let texto = htmlToText(textoFonte);\n\n  \n  if (!texto) {\n    const destinatarios = Array.isArray(r.destinatarios)\n      ? r.destinatarios.map(d => `${d.nome} (${d.polo})`).join(', ')\n      : '';\n    const linhas = [\n      r.meiocompleto ? `Meio: ${r.meiocompleto}` : null,\n      r.siglaTribunal ? `Tribunal: ${r.siglaTribunal}` : null,\n      r.numeroprocessocommascara ? `Processo: ${r.numeroprocessocommascara}` : null,\n      r.status ? `Status: ${r.status}` : null,\n      r.datadisponibilizacao ? `Disponibilizado em: ${r.datadisponibilizacao}` : null,\n      destinatarios ? `Destinatários: ${destinatarios}` : null,\n    ].filter(Boolean);\n    texto = linhas.join('\\n');\n  }\n\n  out.push({\n    json: {\n      id,\n      processo_numero: r.numeroProcesso ?? r.processoNumero ?? r.numeroprocessocommascara ?? null,\n      orgao: r.orgao ?? r.orgaoJulgador ?? null,\n      tribunal: r.siglaTribunal ?? r.tribunal ?? null,\n      data_publicacao:\n        r.dataPublicacao ??\n        r.dataDisponibilizacao ??\n        parseBRDate(r.datadisponibilizacao) ??\n        null,\n      texto,\n      fonte: r,\n      extraido_em: new Date().toISOString()\n    }\n  });\n}\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        176
+      ],
+      "id": "e151028e-9101-4b97-8d93-a13aeb151ba7",
+      "name": "Normalizar + Mapear"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://nlouyewujkwbxhhijxwy.supabase.co/rest/v1/djen_intimacoes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sb3V5ZXd1amt3YnhoaGlqeHd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwMDIzNjUsImV4cCI6MjA3NDU3ODM2NX0.9jomodE0PfqvnMf2f0B-QV9ppunhifHesiXaYSDhLGQ"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates, return=representation"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sb3V5ZXd1amt3YnhoaGlqeHd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwMDIzNjUsImV4cCI6MjA3NDU3ODM2NX0.9jomodE0PfqvnMf2f0B-QV9ppunhifHesiXaYSDhLGQ"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $items().map(i => i.json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1728,
+        -224
+      ],
+      "id": "efe89c03-9d7e-48fc-999d-dab7a4398b04",
+      "name": "Supabase Insert",
+      "retryOnFail": true,
+      "alwaysOutputData": false,
+      "waitBetweenTries": 5000,
+      "maxTries": 5
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1648,
+        192
+      ],
+      "id": "00bc6b13-d2a6-4ed0-9184-4c6a30d6c91f",
+      "name": "Enviar em lotes"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "957561a6-28e9-4e72-9569-4fdc7fff282a",
+              "leftValue": "={{ Number(Array.isArray($json.items) ? $json.items.length : ($json.count ?? 0)) }}\n",
+              "rightValue": "={{ Number($item(0).$node[\"Prep Datas (D-1 a D)\"].json.itensPorPagina) }}\n",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        688,
+        -256
+      ],
+      "id": "ef16b689-3006-4a96-997c-a1832b40eafe",
+      "name": "Tem próxima página?"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Trim Payload\n * - Enxuga campos muito grandes para evitar 502/ECONNRESET no Supabase.\n * - Mantém a estrutura esperada pelo nó de insert.\n */\n\nconst MAX_TEXTO = 120_000; // ~120 KB\n\nfunction shrinkFonte(fonte) {\n  if (!fonte || typeof fonte !== 'object') return fonte;\n\n\n  const f = { ...fonte };\n\n  // Remove arrays e campos pesados que não são obrigatórios para o teste\n  delete f.destinatarios;\n  delete f.destinatarioadvogados;\n\n  // Mantem apenas o essencial\n  const keep = {\n    id: f.id,\n    hash: f.hash,\n    siglaTribunal: f.siglaTribunal,\n    numeroprocessocommascara: f.numeroprocessocommascara,\n    datadisponibilizacao: f.datadisponibilizacao,\n    nomeOrgao: f.nomeOrgao,\n    tipoComunicacao: f.tipoComunicacao,\n    link: f.link,\n  };\n\n  return keep;\n}\n\nreturn items.map(({ json }) => {\n  const out = { ...json };\n\n  // Trunca texto muito grande\n  if (typeof out.texto === 'string' && out.texto.length > MAX_TEXTO) {\n    out.texto = out.texto.slice(0, MAX_TEXTO) + '\\n[texto truncado]';\n  }\n\n  // Enxuga 'fonte' (jsonb)\n  out.fonte = shrinkFonte(out.fonte);\n\n  // Garante tipos básicos\n  if (out.id != null) out.id = String(out.id);\n  if (out.processo_numero != null) out.processo_numero = String(out.processo_numero);\n  if (out.tribunal != null) out.tribunal = String(out.tribunal);\n  if (out.orgao != null) out.orgao = String(out.orgao);\n\n  return { json: out };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1264,
+        192
+      ],
+      "id": "00d51e5a-4a0e-424b-8418-37cb9ce96d84",
+      "name": "Trim Payload (Enxugar o payload)"
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        -272
+      ],
+      "id": "70656490-3042-456c-9bee-fd0feff20267",
+      "name": "Wait",
+      "webhookId": "925a7cac-e92f-4b0e-97f4-26eb0b026965"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lê os parâmetros base do nó \"Prep Datas (D-1 a D)\" e incrementa a página atual\nconst base = $item(0).$node[\"Prep Datas (D-1 a D)\"].json;\nconst paginaAtual = Number($json.pagina ?? 1);\n\nconst MAX_PAGINAS = 500;\nif (paginaAtual + 1 > MAX_PAGINAS) {\n  return [];\n}\n\nreturn [{\n  json: {\n    dataInicio: base.dataInicio,\n    dataFim: base.dataFim,\n    itensPorPagina: base.itensPorPagina,\n    meio: base.meio,\n    pagina: paginaAtual + 1\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        -272
+      ],
+      "id": "dc005b62-e206-49ef-b435-b5dd42511ffa",
+      "name": "Próxima Página"
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1936,
+        -224
+      ],
+      "id": "146a2018-8ca3-47ef-8439-e2a40ef0940c",
+      "name": "Wait1",
+      "webhookId": "d7532a06-2176-4f24-bbb0-cbed2065737f"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prep Datas (D-1 a D)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Datas (D-1 a D)": {
+      "main": [
+        [
+          {
+            "node": "DJEN – Consulta (página 1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DJEN – Consulta (página 1)": {
+      "main": [
+        [
+          {
+            "node": "Tem próxima página?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Normalizar + Mapear",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar + Mapear": {
+      "main": [
+        [
+          {
+            "node": "Trim Payload (Enxugar o payload)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar em lotes": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Enviar em lotes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Supabase Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem próxima página?": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalizar + Mapear",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trim Payload (Enxugar o payload)": {
+      "main": [
+        [
+          {
+            "node": "Enviar em lotes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Próxima Página",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Próxima Página": {
+      "main": [
+        [
+          {
+            "node": "DJEN – Consulta (página 1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Insert": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Enviar em lotes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "27d77db4-b341-4b33-8d20-02f4736f2f41",
+  "meta": {
+    "instanceId": "f773747b0326014ce05070230d6396ff617691b37de5590ce8a989067a6988f5"
+  },
+  "id": "Q4fzTidv8Jeqruow",
+  "tags": []
+}

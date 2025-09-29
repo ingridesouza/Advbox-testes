@@ -1,0 +1,287 @@
+{
+  "name": "Onboarding Emails",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "2ec10725-2c78-4b22-a891-53c498607174",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE fila_envio\nSET status = 'enviado'\nWHERE cliente_id = '{{$item(0).$node[\"Buscar fila pendente\"].json[\"cliente_id\"]}}'::uuid;\n",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1040,
+        -96
+      ],
+      "id": "e4ae671e-61e4-4ebe-9453-83b2c48c863b",
+      "name": "Atualizar fila enviado",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "oP1udR8MrsSfPLiW",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO log_envios (cliente_id, contexto, status, enviado_em)\nVALUES (\n  '{{$item(0).$node[\"Buscar fila pendente\"].json[\"cliente_id\"]}}'::uuid,\n  '{{$item(0).$node[\"Buscar fila pendente\"].json[\"contexto\"]}}',\n  'erro',\n  NOW()\n);\n",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        832,
+        96
+      ],
+      "id": "c19e79ca-9e76-48a1-8443-d0f8192c5da6",
+      "name": "Registrar log erro",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "oP1udR8MrsSfPLiW",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE fila_envio\nSET status = 'erro'\nWHERE cliente_id = '{{$item(0).$node[\"Buscar fila pendente\"].json[\"cliente_id\"]}}'::uuid;\n",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1040,
+        96
+      ],
+      "id": "712ab2e3-3cf6-4b6c-bd25-b1757d2fd446",
+      "name": "Atualizar fila erro",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "oP1udR8MrsSfPLiW",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO log_envios (cliente_id, contexto, status, enviado_em)\nVALUES (\n  '{{$item(0).$node[\"Buscar fila pendente\"].json[\"cliente_id\"]}}'::uuid,\n  '{{$item(0).$node[\"Buscar fila pendente\"].json[\"contexto\"]}}',\n  'sucesso',\n  NOW()\n);\n",
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        832,
+        -96
+      ],
+      "id": "20451951-fffe-481c-867a-93615eab05c5",
+      "name": "Registrar log sucesso",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "oP1udR8MrsSfPLiW",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1a1b78e7-afa7-48ee-a6f6-4bdf0234843c",
+              "leftValue": "",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "5fb32f76-c4e7-485e-9577-93b9bb16e7ba",
+      "name": "Checar envio Gmail"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json.email}}",
+        "subject": "=Bem-vindo(a) ao onboarding - Contexto {{$json.contexto}}",
+        "message": "=Olá, seja bem-vindo(a)! <br><br> Aqui está o material do seu onboarding no contexto <b>{{$json.contexto}}</b>: <br> 📄 PDF: <a href=\"{{$json.pdf_url}}\">Clique aqui</a> <br> 🎥 Vídeo: <a href=\"{{$json.video_url}}\">Clique aqui</a> <br><br> Bom aprendizado!",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        416,
+        0
+      ],
+      "id": "4e40fef6-dc5f-4550-bd08-89ee5088e160",
+      "name": "Enviar e-mail Gmail",
+      "webhookId": "c1b172bc-8aa2-4c03-a1eb-e3fa8bbec6a3",
+      "alwaysOutputData": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PJAVoYiSLyjRFoYm",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  f.id           AS fila_id,\n  f.contexto     AS contexto,\n  c.id           AS cliente_id,\n  c.email        AS email,\n  ct.pdf_url     AS pdf_url,\n  ct.video_url   AS video_url\nFROM fila_envio f\nJOIN clientes c   ON c.id = f.cliente_id\nJOIN conteudos ct ON ct.contexto = f.contexto AND ct.ativo = true\nWHERE f.status = 'pendente'\nORDER BY f.created_at\nLIMIT 50;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "9d30e884-10d1-4f43-ae52-2fc1d6388632",
+      "name": "Buscar fila pendente",
+      "credentials": {
+        "postgres": {
+          "id": "oP1udR8MrsSfPLiW",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Buscar fila pendente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar log erro": {
+      "main": [
+        [
+          {
+            "node": "Atualizar fila erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar log sucesso": {
+      "main": [
+        [
+          {
+            "node": "Atualizar fila enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checar envio Gmail": {
+      "main": [
+        [
+          {
+            "node": "Registrar log sucesso",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar log erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar e-mail Gmail": {
+      "main": [
+        [
+          {
+            "node": "Checar envio Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar fila pendente": {
+      "main": [
+        [
+          {
+            "node": "Enviar e-mail Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "6a3ec62e-edc1-4840-b36e-842c30d88a28",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f773747b0326014ce05070230d6396ff617691b37de5590ce8a989067a6988f5"
+  },
+  "id": "U0EVp9Pl1ebUKa0A",
+  "tags": []
+}
