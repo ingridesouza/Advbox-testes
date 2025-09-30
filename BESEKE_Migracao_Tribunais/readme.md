@@ -72,7 +72,7 @@ Este README documenta o fluxo do **n8n** que recebe um payload via **Webhook**, 
 
     * Retorna JSON com resumo (ex.: subject, to, tamanho do HTML).
 
-> Obs.: Os scripts completos das Functions usados acima já estão no seu fluxo (as versões finais que ajustamos).
+
 
 ---
 
