@@ -4,7 +4,7 @@ Este README documenta o fluxo do **n8n** que recebe um payload via **Webhook**, 
 
 ---
 
-## 📌 Visão geral
+## Visão geral
 
 * **Entrada:** JSON de webhook com dados do cliente/conta/“Dados do processo”.
 * **Extração de campos:** HTTP Request para um provedor OpenAI-compat (usamos **DeepSeek** neste teste).
@@ -14,7 +14,7 @@ Este README documenta o fluxo do **n8n** que recebe um payload via **Webhook**, 
 
 ---
 
-## 🧭 Arquitetura do workflow (nós do n8n)
+## Arquitetura do workflow (nós do n8n)
 
 1. **Webhook**
    `POST /webhook-test/advbox/migracao/email` (modo teste)
@@ -76,7 +76,7 @@ Este README documenta o fluxo do **n8n** que recebe um payload via **Webhook**, 
 
 ---
 
-## 🧩 Provedor de IA (usado no teste)
+## Provedor de IA 
 
 **DeepSeek (OpenAI-compat)**
 
@@ -101,7 +101,7 @@ Este README documenta o fluxo do **n8n** que recebe um payload via **Webhook**, 
 
 ---
 
-## 🔧 Variáveis de ambiente
+## Variáveis de ambiente
 
 Você pode salvar a chave como variável de ambiente do Windows e referenciar no header:
 
@@ -123,7 +123,7 @@ Você pode salvar a chave como variável de ambiente do Windows e referenciar no
 
 ---
 
-## ▶️ Como executar local
+## Como executar local
 
 1. Inicie o n8n:
 
@@ -133,7 +133,7 @@ Você pode salvar a chave como variável de ambiente do Windows e referenciar no
 2. Abra o workflow **ADVBOX • Migração • E-mail Condicional (IA)** e clique em **Execute workflow** (modo teste).
 3. Em outro terminal, envie a **requisição de teste** abaixo.
 
-### ✅ Requisição de teste
+### Requisição de teste
 
 ```cmd
 curl -sS -X POST "http://localhost:5678/webhook-test/advbox/migracao/email" -H "Content-Type: application/json" -d "{\"id_conta\":\"81257\",\"nome_cliente\":\"BESEKE ADVOCACIA\",\"cliente_email\":\"anderson@beseke.adv.br\",\"Dados de usuários ADVBOX\":[{\"id\":1,\"users\":[{\"id\":47753,\"name\":\"ARTHUR SANTOS\",\"email\":\"AGATA.SANTOS@ADVBOX.COM.BR\"},{\"id\":5395,\"name\":\"ALAN VITAL\",\"email\":\"ALAN.VITAL@ADVBOX.COM.BR\"}]}],\"Dados do processo\":[{\"protocol_number\":\"81257\",\"type\":\"MIGRAÇÃO POR TRIBUNAIS\",\"group\":\"BANCA JURIDICA\",\"responsible_id\":5395,\"responsible\":\"ALAN VITAL\",\"notes\":\"ID da conta: 81257\\nPlano: Banca Jurídica\\n---\\nMigração por: tribunais com validação\\nResponsável: Anderson Beseke\\nE-mail: anderson@beseke.adv.br\\n----\\nPessoas\\nProcessos\\n---\\nDiários: Maranhão, Santa Catarina, São Paulo.\\nIntimações eletrônicas: Diário Oficial e DJEN.\\nLink da proposta: https://f005.backblazeb2.com/file/Backup-AD/Propostas/proposta_final_id_81257.pdf\"}]}"
@@ -144,7 +144,7 @@ curl -sS -X POST "http://localhost:5678/webhook-test/advbox/migracao/email" -H "
 
 ---
 
-## ✅ Saída esperada
+## Saída esperada
 
 * **Assunto:** `Migração ADVBOX • Conta 81257 • BESEKE ADVOCACIA`
 * **Para:** `anderson@beseke.adv.br` (resolvido automaticamente a partir do payload/notes)
@@ -178,7 +178,7 @@ curl -sS -X POST "http://localhost:5678/webhook-test/advbox/migracao/email" -H "
 
 ---
 
-## 📄 Notas finais
+## Notas finais
 
 * O fluxo é **idempotente**: se a IA não retornar JSON válido, o **regex_fallback** cobre os campos essenciais.
 * O **assunto** e a **saudação** usam fallback para `customers[0].name` quando `cliente_nome` não vem no topo.
