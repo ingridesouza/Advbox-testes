@@ -1,17 +1,24 @@
-## Automação de Coleta e Armazenamento de Intimações do DJEN
+# Atividade 1 – Automação de Onboarding com n8n, Gmail e Supabase
 
 ## Descrição do fluxo
 
-Este workflow coleta automaticamente as publicações de intimações do **DJEN** (Diário de Justiça Eletrônico Nacional), extrai os textos relevantes e registra os dados no banco **Supabase (Postgres)**.
-O fluxo evita duplicações e garante que todas as intimações sejam armazenadas para consultas posteriores.
+Este workflow implementa um processo de **onboarding automático de clientes**:
 
-Fluxo geral:
+* O cliente é registrado no banco de dados (Supabase/Postgres).
+* O sistema identifica qual conteúdo deve ser enviado (contexto X, Y ou Z).
+* O n8n envia um e-mail personalizado via Gmail contendo links de **vídeo** e **PDF** referentes ao contexto.
+* Cada envio é **registrado em log** no banco, e o status da fila é atualizado para indicar sucesso ou erro.
 
-1. **Schedule Trigger** – dispara diariamente (ex.: 07:00).
-2. **HTTP Request (DJEN)** – faz a requisição para buscar as intimações publicadas.
-3. **Function / Set Node** – processa a resposta, limpa HTML e transforma em JSON com os campos esperados.
-4. **Postgres (Supabase)** – insere as intimações na tabela `djen_intimacoes`, ignorando registros já existentes (baseado em hash/identificador).
-5. (Opcional) **Log** – registra quantos registros foram coletados no dia para monitoramento.
+Fluxo resumido:
+
+1. **Schedule Trigger** – executa o fluxo periodicamente (ex.: a cada 5 minutos).
+2. **Postgres (Select pendentes)** – consulta a tabela `fila_envio` para buscar os clientes com status `pendente`.
+3. **Split In Batches** – processa os envios um a um, evitando ultrapassar limites do Gmail.
+4. **Gmail (Send message)** – envia o e-mail com links dinâmicos do PDF e vídeo.
+5. **If** – verifica se o envio foi bem-sucedido.
+
+   * **Ramo TRUE**: insere log de sucesso em `log_envios` e atualiza `fila_envio` para `enviado`.
+   * **Ramo FALSE**: insere log de erro em `log_envios` e atualiza `fila_envio` para `erro`.
 
 ---
 
@@ -52,52 +59,71 @@ create table log_envios (
   enviado_em timestamp default now(),
   status text
 );
+
+
+ALTER TABLE conteudos
+ADD CONSTRAINT conteudos_contexto_unique UNIQUE (contexto);
+
 ```
 
 ---
 
-## Como executar o fluxo
+## ▶️ Como executar o fluxo
 
 1. **Importar o workflow**
 
-   * Abra o n8n → *Import workflow* → selecione o arquivo JSON da Atividade 2.
+   * Abra o n8n → *Import Workflow* → selecione o JSON fornecido.
 
-2. **Configurar credenciais**
+2. **Criar credenciais**
 
-   * **Postgres (Supabase):** usar o host, database, user e senha obtidos no painel do Supabase.
-   * Não há credenciais externas adicionais, apenas a conexão com o Supabase.
+   * **Postgres (Supabase):** insira host, porta (6543 se usar pooler), database, user e senha. Marque SSL.
+   * **Gmail OAuth2:** crie um projeto no Google Cloud, habilite a Gmail API e configure credenciais OAuth2.
 
-3. **Rodar os testes**
+     * Escopo necessário: `https://www.googleapis.com/auth/gmail.send`
+     * Redirect URI: `http://localhost:5678/rest/oauth2-credential/callback`
 
-   * Execute manualmente o workflow via botão *Execute workflow*.
-   * Verifique no Supabase se os registros foram inseridos:
+3. **Popular o banco com dados de teste**
 
-     ```sql
-     SELECT * FROM djen_intimacoes ORDER BY publicado_em DESC LIMIT 10;
-     ```
+   ```sql
+   INSERT INTO conteudos (contexto, video_url, pdf_url) VALUES
+   ('X', 'https://meu-video-x.com', 'https://meu-pdf-x.com'),
+   ('Y', 'https://meu-video-y.com', 'https://meu-pdf-y.com'),
+   ('Z', 'https://meu-video-z.com', 'https://meu-pdf-z.com')
+   ON CONFLICT (contexto) DO NOTHING;
 
-4. **Agendamento**
+   INSERT INTO clientes (nome, email, contexto) VALUES
+   ('Cliente X', 'cliente.x@teste.com', 'X'),
+   ('Cliente Y', 'cliente.y@teste.com', 'Y'),
+   ('Cliente Z', 'cliente.z@teste.com', 'Z')
+   ON CONFLICT (email) DO NOTHING;
 
-   * Configure o *Schedule Trigger* para rodar diariamente no horário desejado.
+   INSERT INTO fila_envio (cliente_id, contexto)
+   SELECT id, contexto FROM clientes;
+   ```
+
+4. **Executar o fluxo manualmente**
+
+   * Clique em *Execute Workflow* no n8n.
+   * O Gmail enviará os e-mails configurados.
+
+5. **Agendar o fluxo**
+
+   * Configure o *Schedule Trigger* (ex.: a cada 5 minutos) para rodar automaticamente.
 
 ---
 
-## Estratégia de testes
+## 🧪 Estratégia de testes
 
-* **n8n:** usar *Execute step* no nó de requisição HTTP para validar se a resposta do DJEN está correta.
-* **Função de parsing:** inspecionar se os dados JSON gerados têm os campos `processo`, `parte`, `advogado`, `texto`, `publicado_em`.
-* **Banco:** rodar queries no SQL Editor do Supabase para verificar:
+* **Teste de envio**: insira clientes fictícios na `fila_envio` e verifique se o e-mail chega.
+* **Teste de duplicação**: rode o fluxo duas vezes seguidas e confira que o status `enviado` evita reenvio.
+* **Teste de erro**: use um e-mail inválido, valide se cai no ramo `false` e se o status vira `erro`.
 
-  ```sql
-  SELECT COUNT(*) FROM djen_intimacoes;
-  SELECT publicado_em, COUNT(*) FROM djen_intimacoes GROUP BY publicado_em;
-  ```
-* **Teste de duplicação:** rodar o fluxo duas vezes no mesmo dia e verificar que não há duplicatas (graças ao campo `hash` único).
 
 ---
 
-## O que foi entregue
+## ✅ O que foi entregue
 
 * Workflow do n8n em JSON.
-* Script SQL para criação da tabela `djen_intimacoes`.
+* Script SQL para criação das tabelas.
+* Script de seed para popular dados de teste.
 * README.md (este documento).
