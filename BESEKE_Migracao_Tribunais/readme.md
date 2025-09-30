@@ -97,7 +97,7 @@ Este README documenta o fluxo do **n8n** que recebe um payload via **Webhook**, 
   ```
 * O **Body** é montado no node via **Expression** com `JSON.stringify($json)` (o payload de entrada).
 
-> 💡 Também funcionaria com o endpoint OpenAI-compat do Gemini, porém durante o teste sua chave gerou `API_KEY_INVALID` e migramos para DeepSeek.
+> 💡 Também funcionaria com o endpoint OpenAI-compat do Gemini, porém durante o teste a minha chave gerou `API_KEY_INVALID` e migrei para DeepSeek.
 
 ---
 
