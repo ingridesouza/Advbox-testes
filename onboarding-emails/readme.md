@@ -1,6 +1,6 @@
 ## Automação de Coleta e Armazenamento de Intimações do DJEN
 
-## 🚀 Descrição do fluxo
+## Descrição do fluxo
 
 Este workflow coleta automaticamente as publicações de intimações do **DJEN** (Diário de Justiça Eletrônico Nacional), extrai os textos relevantes e registra os dados no banco **Supabase (Postgres)**.
 O fluxo evita duplicações e garante que todas as intimações sejam armazenadas para consultas posteriores.
@@ -15,7 +15,7 @@ Fluxo geral:
 
 ---
 
-## 🗂️ Estrutura do banco (Supabase/Postgres)
+## Estrutura do banco (Supabase/Postgres)
 
 ```sql
 -- Tabela de clientes
@@ -56,7 +56,7 @@ create table log_envios (
 
 ---
 
-## ▶️ Como executar o fluxo
+## Como executar o fluxo
 
 1. **Importar o workflow**
 
@@ -82,7 +82,7 @@ create table log_envios (
 
 ---
 
-## 🧪 Estratégia de testes
+## Estratégia de testes
 
 * **n8n:** usar *Execute step* no nó de requisição HTTP para validar se a resposta do DJEN está correta.
 * **Função de parsing:** inspecionar se os dados JSON gerados têm os campos `processo`, `parte`, `advogado`, `texto`, `publicado_em`.
@@ -96,7 +96,7 @@ create table log_envios (
 
 ---
 
-## ✅ O que foi entregue
+## O que foi entregue
 
 * Workflow do n8n em JSON.
 * Script SQL para criação da tabela `djen_intimacoes`.
